@@ -1,103 +1,146 @@
-# 📄 CV RAG System
+# 👔 TalentTrace RAG
 
-An intelligent, HR-focused **Retrieval-Augmented Generation (RAG)** system designed to chat with multiple CVs simultaneously. This tool uses LLM-driven structural chunking to parse resumes more accurately than traditional fixed-size window methods.
-
-## 🚀 Features
-
-* **LLM-Driven Structural Chunking**: Instead of arbitrary character limits, the system uses `Llama 3.3` to logically identify CV sections (e.g., Experience, Education, Skills).
-* **Multi-CV Context**: Upload multiple PDFs and query across all of them or filter for specific candidates automatically.
-* **Vector Search with Qdrant**: High-performance vector similarity search using `all-MiniLM-L6-v2` embeddings.
-* **Session Isolation**: Securely tracks which CVs are active in your current session using file hashing to prevent redundant indexing.
-* **HR-Optimized Responses**: Answers are strictly grounded in the provided CV excerpts with clear candidate attribution.
+**TalentTrace RAG** is an intelligent HR recruitment assistant designed to transform static CVs into an interactive knowledge base. By utilizing **LLM-driven structural chunking**, it moves beyond simple keyword matching to understand the logical sections of a resume—allowing recruiters to query specific candidates or skills with unprecedented precision.
 
 ---
 
-## 🛠️ Tech Stack
+## 🌟 Core HR Features
 
-**Frontend** | [Streamlit](https://streamlit.io/)
+* **Structural Intelligence**
+  Uses `Llama-3.3-70b` to logically split CVs into sections such as *Work Experience*, *Education*, and *Technical Skills*, rather than arbitrary text blocks.
 
-**Orchestration** | Python, [Groq SDK](https://github.com/groq/groq-python) 
+* **Fact-Grounded Responses**
+  The system acts as an *Expert HR Assistant*, answering questions using **only retrieved CV excerpts** to prevent hallucinations.
 
-**Vector Database** | [Qdrant](https://qdrant.tech/) 
+* **Automatic Candidate Attribution**
+  Every generated response is explicitly attributed to the relevant candidate by name.
 
-**Embeddings** | `sentence-transformers/all-MiniLM-L6-v2`
+* **Session-Based Isolation**
+  Multiple candidates can be processed within a single session, with optional filtering by candidate name or file hash.
 
-**LLM** | `Llama-3.3-70b-versatile` (via Groq)
-
-**PDF Parsing** | `pypdf`
+* **Source Transparency**
+  Includes a *View Retrieved Sources* expander, enabling HR professionals to verify the raw resume content behind every AI-generated claim.
 
 ---
 
-## 📋 Prerequisites
+## 🏗️ Database Architecture
 
-* Python 3.10+
-* A **Groq Cloud** API Key
-* A **Qdrant** instance (Cloud or Local Docker)
+The system relies on **Qdrant** for high-performance vector retrieval. The setup script initializes the environment with production-oriented optimizations:
 
-## ⚙️ Installation & Setup
+### Vector Configuration
 
-1. **Clone the repository:**
-```bash
-git clone https://github.com/your-username/cv-rag-system.git
-cd cv-rag-system
+* **Vector Size:** 384
+* **Embedding Model:** `all-MiniLM-L6-v2`
+* **Similarity Metric:** Cosine Distance
 
-```
+### Payload Indexing
 
+To ensure low-latency filtering at scale, the following fields are indexed as `KEYWORD` types:
 
-2. **Install dependencies:**
-```bash
-pip install -r req.txt
+* **`file_hash`**
+  Prevents duplicate indexing and enforces session-level isolation.
+* **`candidate_name` / `candidate_name_lower`**
+  Enables instant filtering when a recruiter mentions a candidate by name.
+* **`section`**
+  Allows retrieval to prioritize or isolate specific resume sections.
 
-```
+---
 
+## 🛠️ Technical Stack
 
-3. **Configure Environment Variables:**
-Create a `.env` file in the root directory:
+| Component         | Technology                                 |
+| ----------------- | ------------------------------------------ |
+| **Interface**     | Streamlit                                  |
+| **LLM Inference** | Groq (Llama 3.3 70B)                       |
+| **Vector Store**  | Qdrant                                     |
+| **Embeddings**    | Sentence-Transformers (`all-MiniLM-L6-v2`) |
+| **PDF Engine**    | PyPDF                                      |
+
+---
+
+## 🚀 Quick Start
+
+### 1. Configure Environment
+
+Create a `.env` file with the following variables:
+
 ```env
-GROQ_API_KEY=your_groq_key_here
-QDRANT_URL=your_qdrant_url
-QDRANT_API_KEY=your_qdrant_api_key
+GROQ_API_KEY=your_key
+QDRANT_URL=your_url
+QDRANT_API_KEY=your_qdrant_key
 COLLECTION_NAME=cv_collection
-GROQ_MODEL=llama-3.3-70b-versatile
-
 ```
 
+### 2. Initialize Database
 
-4. **Initialize the Database:**
-Run the setup script to create the Qdrant collection and payload indexes:
+Run the setup script **once** to create the collection and payload indexes:
+
 ```bash
 python qdrant_setup.py
-
 ```
-
-
 
 ---
 
 ## 🖥️ Usage
 
-1. **Start the application:**
+### Start the Application
+
+Launch the Streamlit interface:
+
 ```bash
 streamlit run app.py
-
 ```
 
+### Upload CVs
 
-2. 
-**Upload CVs**: Drag and drop PDF resumes into the sidebar/upload section.
+Upload one or more PDF resumes using the sidebar upload component.
+Each CV is automatically processed and isolated within the current session to maintain candidate-level accuracy.
 
+### Search & Query
 
-3. **Search**: Ask questions like:
-* *"Which candidates have experience with Kubernetes?"*
-* *"Compare the educational backgrounds of Saif and Jane."*
-* *"Summarize the work history for the candidate from Google."*
+Ask natural-language questions such as:
 
+* *Which candidates have experience with Kubernetes?*
+* *Compare the educational backgrounds of Saif and Jane.*
+* *Summarize the work history of the candidate who worked at Google.*
 
+The system automatically identifies relevant candidates, retrieves supporting evidence, and generates a structured HR-focused response.
 
-## 🧠 How it Works
+---
 
-1. **Extraction**: `pypdf` extracts raw text from the upload.
-2. **Chunking**: The LLM analyzes the text to identify logical sections (Summary, Skills, etc.), ensuring context remains intact.
-3. **Indexing**: Chunks are converted to vectors and stored in **Qdrant** with metadata (file hash, candidate name, section type).
-4. **Retrieval**: When you ask a question, the system filters vectors by your session's file hashes and performs a similarity search.
-5. **Generation**: The retrieved excerpts are fed to Llama 3.3 to generate a structured, factual HR response.
+## 🧠 How It Works
+
+TalentTrace follows a deterministic and auditable pipeline to ensure factual accuracy and transparency:
+
+### 1. Text Extraction
+
+Uploaded PDF resumes are processed using **PyPDF**, extracting raw textual content while preserving section order.
+
+### 2. Structural Chunking
+
+A large language model analyzes the extracted text and identifies logical resume sections (e.g., *Summary*, *Skills*, *Work Experience*, *Education*).
+This preserves contextual integrity and prevents unrelated information from being mixed.
+
+### 3. Vector Indexing
+
+Each structured chunk is embedded and stored in **Qdrant**, along with metadata such as:
+
+* `file_hash`
+* `candidate_name`
+* `section`
+
+### 4. Filtered Retrieval
+
+When a query is submitted, the system:
+
+* Restricts retrieval to the current session’s `file_hashes`
+* Applies candidate-name filters when detected
+* Performs a similarity search to identify the most relevant resume sections
+
+### 5. Answer Generation
+
+The retrieved excerpts are passed to **Llama 3.3 (70B)** with strict constraints:
+
+* Responses must rely **only** on retrieved content
+* Output is structured, concise, and candidate-attributed
+* No external knowledge or assumptions are introduced
