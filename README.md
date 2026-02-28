@@ -1,6 +1,6 @@
 # 👔 TalentTrace RAG
 
-**TalentTrace RAG** is an intelligent HR recruitment assistant designed to transform static CVs into an interactive knowledge base. By utilizing **LLM-driven structural chunking**, it moves beyond simple keyword matching to understand the logical sections of a resume—allowing recruiters to query specific candidates or skills with unprecedented precision.
+**TalentTrace RAG** is an intelligent HR recruitment assistant designed to transform static CVs into an interactive knowledge base. By utilizing **LLM-driven structural chunking**, it moves beyond simple keyword matching to understand the logical sections of a resume—allowing recruiters to query specific candidates, evaluate fit against job descriptions, and generate structured hiring insights with precision.
 
 ---
 
@@ -16,10 +16,19 @@
   Every generated response is explicitly attributed to the relevant candidate by name.
 
 * **Session-Based Isolation**
-  Multiple candidates can be processed within a single session, with optional filtering by candidate name or file hash.
+  Multiple candidates can be processed within a single session, with strict filtering by `file_hash` to ensure complete data isolation.
 
 * **Source Transparency**
   Includes a *View Retrieved Sources* expander, enabling HR professionals to verify the raw resume content behind every AI-generated claim.
+
+* **CV Strength & Weakness Analysis**
+  Compare a single CV directly against a pasted Job Description to generate:
+
+  * Overall match summary
+  * Strengths aligned with the role
+  * Weaknesses and skill gaps
+  * Missing keywords
+  * Estimated match score (0–100%)
 
 ---
 
@@ -39,8 +48,10 @@ To ensure low-latency filtering at scale, the following fields are indexed as `K
 
 * **`file_hash`**
   Prevents duplicate indexing and enforces session-level isolation.
+
 * **`candidate_name` / `candidate_name_lower`**
   Enables instant filtering when a recruiter mentions a candidate by name.
+
 * **`section`**
   Allows retrieval to prioritize or isolate specific resume sections.
 
@@ -48,13 +59,14 @@ To ensure low-latency filtering at scale, the following fields are indexed as `K
 
 ## 🛠️ Technical Stack
 
-| Component         | Technology                                 |
-| ----------------- | ------------------------------------------ |
-| **Interface**     | Streamlit                                  |
-| **LLM Inference** | Groq (Llama 3.3 70B)                       |
-| **Vector Store**  | Qdrant                                     |
-| **Embeddings**    | Sentence-Transformers (`all-MiniLM-L6-v2`) |
-| **PDF Engine**    | PyPDF                                      |
+| Component             | Technology                                 |
+| --------------------- | ------------------------------------------ |
+| **Interface**         | Streamlit                                  |
+| **LLM Inference**     | Groq (Llama 3.3 70B)                       |
+| **Vector Store**      | Qdrant                                     |
+| **Embeddings**        | Sentence-Transformers (`all-MiniLM-L6-v2`) |
+| **PDF Engine**        | PyPDF                                      |
+| **Evaluation Engine** | LLM-based Job Fit Analyzer                 |
 
 ---
 
@@ -91,10 +103,20 @@ Launch the Streamlit interface:
 streamlit run app.py
 ```
 
+---
+
+## 💬 Tab 1 — Chat with CVs
+
 ### Upload CVs
 
-Upload one or more PDF resumes using the sidebar upload component.
-Each CV is automatically processed and isolated within the current session to maintain candidate-level accuracy.
+Upload one or more PDF resumes.
+Each CV is automatically:
+
+1. Extracted
+2. Structurally chunked
+3. Embedded
+4. Indexed in Qdrant
+5. Isolated within the current session
 
 ### Search & Query
 
@@ -104,30 +126,72 @@ Ask natural-language questions such as:
 * *Compare the educational backgrounds of Saif and Jane.*
 * *Summarize the work history of the candidate who worked at Google.*
 
-The system automatically identifies relevant candidates, retrieves supporting evidence, and generates a structured HR-focused response.
+The system automatically:
+
+* Detects mentioned candidate names
+* Applies strict session-level filtering
+* Retrieves relevant resume sections
+* Generates a structured HR-focused answer
+* Displays supporting source excerpts
+
+---
+
+## 📊 Tab 2 — CV Strength & Weakness Report
+
+### Workflow
+
+1. Upload a single CV (PDF)
+2. Paste the full Job Description
+3. Click **Analyze CV**
+
+### Output Includes
+
+* **Overall Match Summary**
+* **Strengths (Aligned Skills & Experience)**
+* **Weaknesses / Gaps**
+* **Missing Keywords or Requirements**
+* **Estimated Match Score (0–100%) with justification**
+
+The evaluation:
+
+* Uses only explicit CV content
+* Does not invent experience
+* Highlights missing requirements clearly
+* Responds in the same language as the Job Description
+
+This enables recruiters to quickly assess candidate-job alignment without manual comparison.
 
 ---
 
 ## 🧠 How It Works
 
-TalentTrace follows a deterministic and auditable pipeline to ensure factual accuracy and transparency:
+TalentTrace follows a deterministic and auditable pipeline to ensure factual accuracy and transparency.
+
+---
 
 ### 1. Text Extraction
 
 Uploaded PDF resumes are processed using **PyPDF**, extracting raw textual content while preserving section order.
+
+---
 
 ### 2. Structural Chunking
 
 A large language model analyzes the extracted text and identifies logical resume sections (e.g., *Summary*, *Skills*, *Work Experience*, *Education*).
 This preserves contextual integrity and prevents unrelated information from being mixed.
 
+---
+
 ### 3. Vector Indexing
 
-Each structured chunk is embedded and stored in **Qdrant**, along with metadata such as:
+Each structured chunk is embedded and stored in **Qdrant**, along with metadata:
 
 * `file_hash`
 * `candidate_name`
+* `candidate_name_lower`
 * `section`
+
+---
 
 ### 4. Filtered Retrieval
 
@@ -135,12 +199,40 @@ When a query is submitted, the system:
 
 * Restricts retrieval to the current session’s `file_hashes`
 * Applies candidate-name filters when detected
-* Performs a similarity search to identify the most relevant resume sections
+* Performs similarity search to identify relevant resume sections
 
-### 5. Answer Generation
+---
 
-The retrieved excerpts are passed to **Llama 3.3 (70B)** with strict constraints:
+### 5. Answer Generation (RAG Mode)
+
+Retrieved excerpts are passed to **Llama 3.3 (70B)** with strict constraints:
 
 * Responses must rely **only** on retrieved content
 * Output is structured, concise, and candidate-attributed
-* No external knowledge or assumptions are introduced
+* External knowledge and assumptions are prohibited
+
+---
+
+### 6. Job Description Evaluation Mode
+
+For CV Strength & Weakness analysis:
+
+* The full CV text is compared directly with the Job Description
+* The LLM performs structured analytical comparison
+* Missing requirements are explicitly identified
+* A reasoned match score is generated
+
+---
+
+## 🎯 Design Principles
+
+* Deterministic retrieval before generation
+* Strict session-level data isolation
+* Explicit candidate attribution
+* No hallucinated experience
+* Transparent and auditable outputs
+* HR-first structured reasoning
+
+---
+
+**TalentTrace RAG transforms resume screening from static document review into an intelligent, explainable recruitment assistant.**
