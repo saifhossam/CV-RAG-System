@@ -97,6 +97,10 @@ python qdrant_setup.py
 
 ### Start the Application
 
+```bash
+pip install -r req.txt
+```
+
 Launch the Streamlit interface:
 
 ```bash
