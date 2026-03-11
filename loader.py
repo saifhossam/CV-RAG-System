@@ -3,13 +3,18 @@ import hashlib
 import re
 import os
 from pypdf import PdfReader
-from groq import Groq
+from openai import AzureOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+AZURE_CHAT_DEPLOYMENT = os.getenv("AZURE_CHAT_DEPLOYMENT")
+
+azure_client = AzureOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+)
 
 
 def extract_text_from_pdf(file) -> str:
@@ -25,17 +30,13 @@ def extract_text_from_pdf(file) -> str:
 
 
 def llm_structural_chunking(text: str):
-    """
-    Fully LLM-driven chunking — the model reads the CV and decides what
-    the sections are, regardless of their names or formatting.
-    Returns (chunks, candidate_name).
-    """
+
     prompt = f"""You are an expert CV parser.
 
 Read the CV below and do two things:
-1. Extract the candidate's full name.
+1. Extract the candidate's full name always in the first line.
 2. Split the CV into its logical sections. Each section should have:
-   - A short descriptive title (e.g. "Education", "Work Experience", "Skills", "Projects", "Summary", or whatever the CV actually contains).
+   - Its title (e.g. "Education", "Work Experience", "Skills", "Projects", "Summary", or whatever the CV actually contains).
    - The full text content of that section, exactly as it appears.
 
 Important rules:
@@ -54,11 +55,11 @@ Respond ONLY with valid JSON — no markdown, no code fences, no extra text:
 }}
 
 CV Text:
-{text[:6000]}
+{text}
 """
     try:
-        response = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
+        response = azure_client.chat.completions.create(
+            model=AZURE_CHAT_DEPLOYMENT,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
         )
