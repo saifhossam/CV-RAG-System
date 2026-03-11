@@ -1,107 +1,119 @@
-# 👔 TalentTrace RAG
+# 📄 CV Intelligence System
 
-**TalentTrace RAG** is an intelligent HR recruitment assistant designed to transform static CVs into an interactive knowledge base. By utilizing **LLM-driven structural chunking**, it moves beyond simple keyword matching to understand the logical sections of a resume—allowing recruiters to query specific candidates, evaluate fit against job descriptions, and generate structured hiring insights with precision.
-
----
-
-## 🌟 Core HR Features
-
-* **Structural Intelligence**
-  Uses `Llama-3.3-70b` to logically split CVs into sections such as *Work Experience*, *Education*, and *Technical Skills*, rather than arbitrary text blocks.
-
-* **Fact-Grounded Responses**
-  The system acts as an *Expert HR Assistant*, answering questions using **only retrieved CV excerpts** to prevent hallucinations.
-
-* **Automatic Candidate Attribution**
-  Every generated response is explicitly attributed to the relevant candidate by name.
-
-* **Session-Based Isolation**
-  Multiple candidates can be processed within a single session, with strict filtering by `file_hash` to ensure complete data isolation.
-
-* **Source Transparency**
-  Includes a *View Retrieved Sources* expander, enabling HR professionals to verify the raw resume content behind every AI-generated claim.
-
-* **CV Strength & Weakness Analysis**
-  Compare a single CV directly against a pasted Job Description to generate:
-
-  * Overall match summary
-  * Strengths aligned with the role
-  * Weaknesses and skill gaps
-  * Missing keywords
-  * Estimated match score (0–100%)
+A Retrieval-Augmented Generation (RAG) application for querying and evaluating CVs using hybrid vector search and Azure OpenAI. Upload multiple CVs, ask natural language questions across them, and generate structured strength/weakness reports against a job description.
 
 ---
 
-## 🏗️ Database Architecture
+## ✨ Features
 
-The system relies on **Qdrant** for high-performance vector retrieval. The setup script initializes the environment with production-oriented optimizations:
-
-### Vector Configuration
-
-* **Vector Size:** 384
-* **Embedding Model:** `all-MiniLM-L6-v2`
-* **Similarity Metric:** Cosine Distance
-
-### Payload Indexing
-
-To ensure low-latency filtering at scale, the following fields are indexed as `KEYWORD` types:
-
-* **`file_hash`**
-  Prevents duplicate indexing and enforces session-level isolation.
-
-* **`candidate_name` / `candidate_name_lower`**
-  Enables instant filtering when a recruiter mentions a candidate by name.
-
-* **`section`**
-  Allows retrieval to prioritize or isolate specific resume sections.
+- **Multi-CV Upload & Indexing** — Upload one or more PDF CVs; each is parsed, chunked by section, and stored with deduplication via file hashing.
+- **Hybrid Search (Dense + Sparse)** — Combines Azure OpenAI embeddings (dense) with SPLADE sparse embeddings, merged via Reciprocal Rank Fusion (RRF) for high-quality retrieval.
+- **Conversational Q&A** — Ask questions across all uploaded CVs; the system filters by candidate name when mentioned in the query.
+- **CV Strength & Weakness Report** — Upload a single CV alongside a job description to get a structured evaluation: match summary, strengths, gaps, missing skills, and a match score.
+- **Persistent Vector Store** — CVs are stored in Qdrant; re-uploading a previously indexed CV skips re-processing automatically.
 
 ---
 
-## 🛠️ Technical Stack
+## 🏗️ Architecture
 
-| Component             | Technology                                 |
-| --------------------- | ------------------------------------------ |
-| **Interface**         | Streamlit                                  |
-| **LLM Inference**     | Groq (Llama 3.3 70B)                       |
-| **Vector Store**      | Qdrant                                     |
-| **Embeddings**        | Sentence-Transformers (`all-MiniLM-L6-v2`) |
-| **PDF Engine**        | PyPDF                                      |
-| **Evaluation Engine** | LLM-based Job Fit Analyzer                 |
+```
+PDF Upload
+    │
+    ▼
+extract_text_from_pdf()         # pypdf
+    │
+    ▼
+llm_structural_chunking()       # Azure OpenAI → section-aware chunks
+    │
+    ▼
+index_documents()
+    ├── _dense_embed()           # text-embedding-3-small (Azure OpenAI)
+    └── _sparse_embed()          # SPLADE (fastembed)
+          │
+          ▼
+       Qdrant (named vectors: "dense" + "sparse")
 
----
-
-## 🚀 Quick Start
-
-### 1. Configure Environment
-
-Create a `.env` file with the following variables:
-
-```env
-GROQ_API_KEY=your_key
-QDRANT_URL=your_url
-QDRANT_API_KEY=your_qdrant_key
-COLLECTION_NAME=cv_collection
+Query
+    │
+    ▼
+retrieve()
+    ├── Dense search
+    ├── Sparse search
+    └── RRF merge
+          │
+          ▼
+generate_answer() / generate_cv_strength_report()   # Azure OpenAI GPT
 ```
 
-### 2. Initialize Database
+---
 
-Run the setup script **once** to create the collection and payload indexes:
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Streamlit |
+| LLM & Embeddings | Azure OpenAI (GPT + text-embedding-3-small) |
+| Sparse Embeddings | fastembed + SPLADE (`prithivida/Splade_PP_en_v1`) |
+| Vector Database | Qdrant |
+| PDF Parsing | pypdf |
+| Config | python-dotenv |
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+
+- Python 3.10+
+- A running [Qdrant](https://qdrant.tech/) instance (cloud or self-hosted)
+- Azure OpenAI resource with:
+  - A **chat** deployment (e.g. `gpt-4.1-nano` or `gpt-4o`)
+  - An **embedding** deployment (`text-embedding-3-small`)
+
+### 2. Clone the repository
+
+```bash
+git clone https://github.com/your-username/cv-intelligence-system.git
+cd cv-intelligence-system
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r req.txt
+pip install fastembed openai
+```
+
+> **Note:** `fastembed` and `openai` are runtime dependencies not yet listed in `req.txt`. Add them if you update the file.
+
+### 4. Configure environment variables
+
+Create a `.env` file in the project root:
+
+```env
+# Azure OpenAI
+AZURE_OPENAI_API_KEY=your_api_key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_VERSION=2024-12-01-preview
+AZURE_OPENAI_DEPLOYMENT=gpt-4.1-nano          # Chat model deployment name
+AZURE_CHAT_DEPLOYMENT=gpt-4.1-nano            # Used by loader.py for chunking
+AZURE_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+
+# Qdrant
+QDRANT_URL=https://your-cluster.qdrant.io
+QDRANT_API_KEY=your_qdrant_api_key
+COLLECTION_NAME=cv_collection                  # Optional, defaults to cv_collection
+```
+
+### 5. Initialize the Qdrant collection
+
+Run this once to create the collection and payload indexes:
 
 ```bash
 python qdrant_setup.py
 ```
 
----
-
-## 🖥️ Usage
-
-### Start the Application
-
-```bash
-pip install -r req.txt
-```
-
-Launch the Streamlit interface:
+### 6. Launch the app
 
 ```bash
 streamlit run app.py
@@ -109,134 +121,70 @@ streamlit run app.py
 
 ---
 
-## 💬 Tab 1 — Chat with CVs
+## 📁 Project Structure
 
-### Upload CVs
-
-Upload one or more PDF resumes.
-Each CV is automatically:
-
-1. Extracted
-2. Structurally chunked
-3. Embedded
-4. Indexed in Qdrant
-5. Isolated within the current session
-
-### Search & Query
-
-Ask natural-language questions such as:
-
-* *Which candidates have experience with Kubernetes?*
-* *Compare the educational backgrounds of Saif and Jane.*
-* *Summarize the work history of the candidate who worked at Google.*
-
-The system automatically:
-
-* Detects mentioned candidate names
-* Applies strict session-level filtering
-* Retrieves relevant resume sections
-* Generates a structured HR-focused answer
-* Displays supporting source excerpts
+```
+├── app.py              # Streamlit UI — two tabs: Chat and Report
+├── loader.py           # PDF extraction and LLM-based section chunking
+├── rag.py              # Embeddings, vector store ops, retrieval, generation
+├── qdrant_setup.py     # One-time Qdrant collection initialisation
+├── req.txt             # Python dependencies
+└── .env                # Environment variables (not committed)
+```
 
 ---
 
-## 📊 Tab 2 — CV Strength & Weakness Report
+## 🖥️ Usage
 
-### Workflow
+### Tab 1 — Chat with CVs
 
-1. Upload a single CV (PDF)
-2. Paste the full Job Description
-3. Click **Analyze CV**
+1. Upload one or more CV PDFs using the file uploader.
+2. Each CV is parsed into sections (Education, Work Experience, Skills, etc.) and indexed.
+3. Type a natural language question (e.g. *"Who has Python experience?"*, *"What is Ahmed's education background?"*).
+4. The system retrieves the most relevant sections and generates a cited answer.
 
-### Output Includes
+### Tab 2 — CV Strength & Weakness Report
 
-* **Overall Match Summary**
-* **Strengths (Aligned Skills & Experience)**
-* **Weaknesses / Gaps**
-* **Missing Keywords or Requirements**
-* **Estimated Match Score (0–100%) with justification**
-
-The evaluation:
-
-* Uses only explicit CV content
-* Does not invent experience
-* Highlights missing requirements clearly
-* Responds in the same language as the Job Description
-
-This enables recruiters to quickly assess candidate-job alignment without manual comparison.
+1. Upload a single CV PDF.
+2. Paste the full job description into the text area.
+3. Click **Analyze CV** to receive a structured report covering:
+   - Overall match summary
+   - Key strengths
+   - Weaknesses and gaps
+   - Missing skills
+   - Estimated match score (0–100%)
 
 ---
 
-## 🧠 How It Works
+## ⚙️ Configuration Reference
 
-TalentTrace follows a deterministic and auditable pipeline to ensure factual accuracy and transparency.
-
----
-
-### 1. Text Extraction
-
-Uploaded PDF resumes are processed using **PyPDF**, extracting raw textual content while preserving section order.
-
----
-
-### 2. Structural Chunking
-
-A large language model analyzes the extracted text and identifies logical resume sections (e.g., *Summary*, *Skills*, *Work Experience*, *Education*).
-This preserves contextual integrity and prevents unrelated information from being mixed.
+| Variable | Description | Default |
+|---|---|---|
+| `AZURE_OPENAI_API_KEY` | Azure OpenAI API key | 
+| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL | 
+| `AZURE_OPENAI_API_VERSION` | API version | `2024-12-01-preview` |
+| `AZURE_OPENAI_DEPLOYMENT` | Chat model deployment name | `gpt-4.1-nano` |
+| `AZURE_CHAT_DEPLOYMENT` | Chat deployment used by loader |
+| `AZURE_OPENAI_EMBEDDING_MODEL` | Embedding model deployment name | `text-embedding-3-small` |
+| `QDRANT_URL` | Qdrant instance URL |
+| `QDRANT_API_KEY` | Qdrant API key | 
+| `COLLECTION_NAME` | Qdrant collection name |
 
 ---
 
-### 3. Vector Indexing
+## 🔍 How Retrieval Works
 
-Each structured chunk is embedded and stored in **Qdrant**, along with metadata:
-
-* `file_hash`
-* `candidate_name`
-* `candidate_name_lower`
-* `section`
-
----
-
-### 4. Filtered Retrieval
-
-When a query is submitted, the system:
-
-* Restricts retrieval to the current session’s `file_hashes`
-* Applies candidate-name filters when detected
-* Performs similarity search to identify relevant resume sections
+1. The query is embedded using both **dense** (Azure OpenAI) and **sparse** (SPLADE) models.
+2. Both embeddings are searched in parallel against the Qdrant collection, filtered to only the CVs uploaded in the current session.
+3. If a candidate name is detected in the query, an additional payload filter narrows results to that candidate.
+4. Results from both searches are merged using **Reciprocal Rank Fusion (RRF)**, which balances lexical and semantic signals without requiring score normalisation.
+5. The top-ranked chunks are passed to GPT as context for answer generation.
 
 ---
 
-### 5. Answer Generation (RAG Mode)
+## 📝 Notes
 
-Retrieved excerpts are passed to **Llama 3.3 (70B)** with strict constraints:
-
-* Responses must rely **only** on retrieved content
-* Output is structured, concise, and candidate-attributed
-* External knowledge and assumptions are prohibited
-
----
-
-### 6. Job Description Evaluation Mode
-
-For CV Strength & Weakness analysis:
-
-* The full CV text is compared directly with the Job Description
-* The LLM performs structured analytical comparison
-* Missing requirements are explicitly identified
-* A reasoned match score is generated
-
----
-
-## 🎯 Design Principles
-
-* Deterministic retrieval before generation
-* Strict session-level data isolation
-* Explicit candidate attribution
-* No hallucinated experience
-* Transparent and auditable outputs
-* HR-first structured reasoning
-
----
-
-**TalentTrace RAG transforms resume screening from static document review into an intelligent, explainable recruitment assistant.**
+- **Deduplication:** CVs are hashed (SHA-256) on upload. Re-uploading the same file skips re-indexing and reuses existing vectors.
+- **Fallback chunking:** If the LLM fails to parse sections, the entire CV text is stored as a single chunk.
+- **Content policy:** Azure content filter errors are caught and surfaced as user-friendly messages.
+- **Language:** The answer generation prompt instructs the model to reply in the same language as the question.
